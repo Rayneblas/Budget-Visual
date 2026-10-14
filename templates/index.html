@@ -1,0 +1,46 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Budget App</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <style>
+    body { font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 0 16px; }
+  </style>
+</head>
+<body>
+  <h1>Budget App</h1>
+  <p>Inner ring: planned. Outer ring: actual.</p>
+  <p id="remaining"></p>
+  <canvas id="chart"></canvas>
+
+  <script>
+    fetch("/budgets/demo/summary")
+      .then(res => res.json())
+      .then(data => {
+        const sum = arr => arr.reduce((a, b) => a + b, 0);
+        const limit = data.spending_limit;
+
+        // Pad each ring up to the limit so it doesn't always fill the full circle
+        const planned = [...data.planned, Math.max(0, limit - sum(data.planned))];
+        const actual = [...data.actual, Math.max(0, limit - sum(data.actual))];
+
+        const colors = ["#8e5cd9", "#3b82f6", "#22c55e", "#f97316", "#ec4899", "#d1d5db"];
+
+        new Chart(document.getElementById("chart"), {
+          type: "doughnut",
+          data: {
+            labels: [...data.categories, "Not spent yet"],
+            datasets: [
+              { label: "Actual", data: actual, backgroundColor: colors },   // outer ring
+              { label: "Planned", data: planned, backgroundColor: colors }  // inner ring
+            ]
+          }
+        });
+
+        document.getElementById("remaining").textContent =
+          `Left this month: $${data.remaining} of $${limit}`;
+      });
+  </script>
+</body>
+</html>
