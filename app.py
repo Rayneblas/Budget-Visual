@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 
 app = Flask(__name__)
 
@@ -33,5 +33,31 @@ def summary(budget_id):
     })
 
 
+@app.route("/budgets/<budget_id>/expenses", methods=["POST"])
+def add_expense(budget_id):
+    """Record an expense/payment and add it to that category's actual total.
+
+    Stored in memory for now, so it resets when the server restarts.
+    """
+    body = request.get_json(silent=True) or {}
+    category = body.get("category")
+    note = (body.get("note") or "").strip()
+
+    try:
+        amount = round(float(body.get("amount")), 2)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Amount must be a number."}), 400
+    if amount <= 0:
+        return jsonify({"error": "Amount must be greater than zero."}), 400
+    if category not in SAMPLE_BUDGET["planned"]:
+        return jsonify({"error": "Pick a valid category."}), 400
+
+    actual = SAMPLE_BUDGET["actual"]
+    actual[category] = round(actual.get(category, 0) + amount, 2)
+    expense = {"category": category, "amount": amount, "note": note}
+    SAMPLE_BUDGET.setdefault("expenses", []).append(expense)
+    return jsonify(expense), 201
+
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, port=5001)
