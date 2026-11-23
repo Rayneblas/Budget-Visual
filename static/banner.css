@@ -1,0 +1,38 @@
+/* Indigo banner shown at the top of every page (markup: templates/banner.html) */
+
+.banner {
+  background: linear-gradient(135deg, #3730a3, #4f46e5 60%, #6366f1);
+  color: #fff;
+  padding: 32px 0;
+}
+
+/* Same width as the page content below it, so the edges line up */
+.banner-inner {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.banner-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.banner .logo { width: 44px; height: 44px; flex-shrink: 0; }
+.banner h1 { margin: 0; font-size: 1.6rem; font-weight: 700; letter-spacing: -0.01em; }
+.banner p { margin: 2px 0 0; color: rgba(255, 255, 255, 0.8); font-size: 0.95rem; }
+
+/* "← All months" link (only on the month dashboard) */
+.banner .back-link {
+  display: inline-block;
+  margin-bottom: 16px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.9rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+.banner .back-link:hover { color: #fff; text-decoration: underline; }
+
+@media (max-width: 560px) {
+  .banner h1 { font-size: 1.35rem; }
+}

@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Budget App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='banner.css') }}">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="{{ url_for('static', filename='colors.js') }}"></script>
+  <style>
+    :root {
+      --brand: #4f46e5;        /* indigo, same as the home page */
+      --brand-dark: #4338ca;
+      --brand-soft: #eef2ff;
+      --text: #111827;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --bad: #dc2626;
+      --bad-soft: #fef2f2;
+    }
+
+    * { box-sizing: border-box; }
+
+    /* Elements with the "hidden" attribute stay hidden even if a rule below
+       sets their display (otherwise display: flex would win over hidden). */
+    [hidden] { display: none !important; }
+
+    body {
+      margin: 0;
+      background: #ffffff;
+      color: var(--text);
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+    }
+
+    /* 1040px matches the banner, so the edges line up */
+    .page { max-width: 1040px; margin: 0 auto; padding: 32px 16px 48px; }
+
+    .page-title { margin: 0; font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; }
+    .page-intro { margin: 6px 0 28px; color: var(--muted); }
+
+    /* ---------- Two columns: form on the left, preview on the right ---------- */
+    .setup-layout {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 24px;
+      align-items: start; /* needed so the sticky preview doesn't stretch to the form's height */
+    }
+
+    .card {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 24px;
+    }
+    .card h2 { margin: 0 0 4px; font-size: 1rem; font-weight: 600; }
+    .card .hint { margin: 0 0 16px; font-size: 0.85rem; color: var(--muted); }
+
+    /* ---------- "Copy last month's budget" callout ---------- */
+    .copy-callout {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap; /* the button drops under the text on narrow screens */
+      background: var(--brand-soft);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 24px;
+    }
+    .copy-title { margin: 0; font-size: 0.9rem; font-weight: 600; }
+    .copy-detail { margin: 2px 0 0; font-size: 0.82rem; color: var(--muted); }
+    .copy-btn {
+      font: inherit; font-size: 0.88rem; font-weight: 600;
+      color: var(--brand); background: #fff;
+      border: 1px solid #c7d2fe; border-radius: 10px;
+      padding: 8px 14px; cursor: pointer; white-space: nowrap;
+    }
+    .copy-btn:hover { border-color: var(--brand); }
+
+    /* ---------- Form fields ---------- */
+    .field-label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    /* An input with a "$" in front of it */
+    .money-input { position: relative; }
+    .money-input::before {
+      content: "$";
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      pointer-events: none; /* clicks go through to the input */
+    }
+    input[type="text"] {
+      width: 100%;
+      font: inherit;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--text);
+    }
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px #e0e7ff;
+    }
+    /* Room on the left for the "$". (This comes after the rule above so it wins.) */
+    .money-input input[type="text"] { padding-left: 26px; }
+
+    /* Fields with an error get a red border */
+    input.invalid { border-color: var(--bad); }
+    input.invalid:focus { box-shadow: 0 0 0 3px #fee2e2; }
+
+    .limit-field { max-width: 260px; }
+    .limit-field input { font-size: 1.1rem; font-weight: 600; }
+
+    /* Red error text shown under a field */
+    .field-error { margin: 6px 0 0; font-size: 0.82rem; color: var(--bad); }
+
+    .divider { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
+
+    /* ---------- Category rows ---------- */
+    /* Each row: color dot | name | amount | remove button */
+    .row-grid {
+      display: grid;
+      grid-template-columns: 12px 1fr 150px 36px;
+      gap: 10px;
+      align-items: center;
+    }
+    .column-labels {
+      font-size: 0.72rem;
+      font-weight: 500;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+    .category-row { margin-bottom: 10px; }
+    .category-row .field-error { margin: 4px 0 0 22px; } /* line up under the name box */
+
+    .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--line); }
+
+    .remove-btn {
+      width: 36px; height: 36px;
+      border: none; border-radius: 10px;
+      background: transparent; color: var(--muted);
+      font-size: 1.3rem; line-height: 1; cursor: pointer;
+    }
+    .remove-btn:hover { background: var(--bad-soft); color: var(--bad); }
+
+    .add-btn {
+      font: inherit; font-size: 0.9rem; font-weight: 600;
+      color: var(--brand); background: var(--brand-soft);
+      border: none; border-radius: 10px;
+      padding: 9px 14px; margin-top: 4px; cursor: pointer;
+    }
+    .add-btn:hover { background: #e0e7ff; }
+
+    /* ---------- Save / Cancel ---------- */
+    .form-actions { display: flex; align-items: center; gap: 16px; margin-top: 28px; }
+    .btn-primary {
+      font: inherit; font-size: 0.95rem; font-weight: 600;
+      color: #fff; background: var(--brand);
+      border: none; border-radius: 10px; padding: 11px 20px; cursor: pointer;
+    }
+    .btn-primary:hover { background: var(--brand-dark); }
+    .btn-primary:disabled { opacity: 0.6; cursor: wait; }
+    .cancel-link { color: var(--muted); font-weight: 500; text-decoration: none; }
+    .cancel-link:hover { color: var(--text); text-decoration: underline; }
+    .form-error { margin: 12px 0 0; font-size: 0.85rem; color: var(--bad); }
+
+    /* ---------- Live preview card ---------- */
+    .preview {
+      position: sticky; /* stays in view while the form scrolls */
+      top: 24px;
+    }
+
+    .chart-wrap { position: relative; max-width: 260px; margin: 8px auto 0; }
+    .center-label {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none; /* so hovering still shows tooltips */
+    }
+    .center-label .big { font-size: 1.6rem; font-weight: 700; }
+    .center-label .small { font-size: 0.82rem; color: var(--muted); margin-top: 2px; }
+
+    .planned-line { margin: 20px 0 8px; font-size: 0.9rem; color: var(--muted); }
+    .planned-line strong { color: var(--text); }
+
+    .bar { height: 8px; background: #f1f5f9; border-radius: 999px; overflow: hidden; }
+    .bar span {
+      display: block; height: 100%; width: 0;
+      background: var(--brand); border-radius: 999px;
+      transition: width 0.2s;
+    }
+    .bar span.over { background: var(--bad); }
+
+    .over-warning {
+      margin: 14px 0 0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: var(--bad-soft);
+      color: var(--bad);
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    /* Shown in the preview before a spending limit is entered */
+    .preview-empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 24px 8px 12px;
+      color: var(--muted);
+    }
+    .empty-ring {
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      border: 14px dashed var(--line);
+      margin-bottom: 16px;
+    }
+    .preview-empty p { margin: 0; max-width: 240px; line-height: 1.5; font-size: 0.9rem; }
+
+    /* ---------- Phones: one column, preview on top ---------- */
+    @media (max-width: 760px) {
+      .setup-layout { grid-template-columns: 1fr; }
+      .preview {
+        order: -1;          /* move the preview above the form */
+        position: static;   /* don't stick, or it would cover the form */
+      }
+      .card { padding: 20px; }
+      .row-grid { grid-template-columns: 12px 1fr 110px 32px; gap: 8px; }
+      .remove-btn { width: 32px; height: 32px; }
+      .page-title { font-size: 1.4rem; }
+    }
+  </style>
+</head>
+<body data-month="{{ month }}">
+  {% with show_back_link = true %}
+    {% include "banner.html" %}
+  {% endwith %}
+
+  <main class="page">
+    <h2 class="page-title">{{ heading }}</h2>
+    <p class="page-intro">Set a spending limit, then split it across categories.</p>
+
+    <div class="setup-layout">
+      <!-- ========== Left: the form ========== -->
+      <form class="card" id="budget-form" novalidate>
+        {% if previous %}
+          <!-- Only for new budgets, when an earlier month has a budget to copy -->
+          <div class="copy-callout">
+            <div>
+              <p class="copy-title">Same plan as last month?</p>
+              <p class="copy-detail" id="copy-detail">{{ previous.month_label }}</p>
+            </div>
+            <button type="button" class="copy-btn" id="copy-btn">Copy last month's budget</button>
+          </div>
+        {% endif %}
+
+        <label class="field-label" for="limit-input">Monthly spending limit</label>
+        <div class="limit-field">
+          <div class="money-input">
+            <input type="text" id="limit-input" inputmode="decimal" placeholder="2,000" autocomplete="off">
+          </div>
+          <p class="field-error" id="limit-error" hidden></p>
+        </div>
+
+        <hr class="divider">
+
+        <h2>Categories</h2>
+        <p class="hint">How much you plan to spend on each thing this month.</p>
+
+        <div class="row-grid column-labels" aria-hidden="true">
+          <span></span><span>Category</span><span>Amount</span><span></span>
+        </div>
+
+        <!-- Category rows are added here by the script -->
+        <div id="category-rows"></div>
+
+        <button type="button" class="add-btn" id="add-category-btn">+ Add category</button>
+
+        <div class="form-actions">
+          <button type="submit" class="btn-primary" id="save-btn">Save budget</button>
+          <a class="cancel-link" href="/">Cancel</a>
+        </div>
+        <p class="form-error" id="form-error" hidden></p>
+      </form>
+
+      <!-- ========== Right: live preview ========== -->
+      <aside class="card preview" aria-live="polite">
+        <h2>Preview</h2>
+
+        <!-- Before a spending limit is entered -->
+        <div class="preview-empty" id="preview-empty">
+          <div class="empty-ring"></div>
+          <p>Add a spending limit and categories to see your plan.</p>
+        </div>
+
+        <!-- Once there's a spending limit -->
+        <div id="preview-chart" hidden>
+          <div class="chart-wrap">
+            <canvas id="chart"></canvas>
+            <div class="center-label">
+              <div class="big" id="center-amount"></div>
+              <div class="small" id="center-text"></div>
+            </div>
+          </div>
+          <p class="planned-line" id="planned-line"></p>
+          <div class="bar"><span id="planned-bar"></span></div>
+          <p class="over-warning" id="over-warning" hidden></p>
+        </div>
+      </aside>
+    </div>
+  </main>
+
+  <!-- The blueprint for one category row. The script copies it for each row. -->
+  <template id="row-template">
+    <div class="category-row">
+      <div class="row-grid">
+        <span class="dot"></span>
+        <input type="text" class="name-input" aria-label="Category name" maxlength="40" autocomplete="off">
+        <div class="money-input">
+          <input type="text" class="amount-input" aria-label="Planned amount" inputmode="decimal" placeholder="0" autocomplete="off">
+        </div>
+        <button type="button" class="remove-btn" aria-label="Remove category">×</button>
+      </div>
+      <p class="field-error" hidden></p>
+    </div>
+  </template>
+
+  <!-- The existing budget when editing, or null for a new one.
+       Flask fills this in; tojson turns the Python data into JSON. -->
+  <script id="existing-budget" type="application/json">{{ existing|tojson }}</script>
+
+  <!-- Last month's budget (only for new budgets), or null if there's nothing to copy -->
+  <script id="previous-budget" type="application/json">{{ previous|tojson }}</script>
+
+  <script>
+    // Category colors (categoryColor, EMPTY_COLOR) come from static/colors.js
+
+    // The month comes from the URL (/setup/2026-12). Flask writes it into
+    // the <body data-month="..."> attribute when it renders this page.
+    const MONTH = document.body.dataset.month;
+    const existing = JSON.parse(document.getElementById("existing-budget").textContent);
+    const previous = JSON.parse(document.getElementById("previous-budget").textContent);
+
+    const form = document.getElementById("budget-form");
+    const limitInput = document.getElementById("limit-input");
+    const rowsEl = document.getElementById("category-rows");
+    const rowTemplate = document.getElementById("row-template");
+    let chart = null; // created the first time the preview has something to show
+
+    // ---------- Small helpers ----------
+
+    // Shows whole dollars when there are no cents: $1,610 but $12.50
+    function formatMoney(value) {
+      const cents = Math.round(value * 100) / 100;
+      return cents.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: Number.isInteger(cents) ? 0 : 2
+      });
+    }
+
+    // Turns text like "1,200.50" or "$900" into a number.
+    // Returns NaN if it isn't a number. (Check for empty text before calling this.)
+    function parseMoney(text) {
+      const cleaned = text.replace(/[$,]/g, "").trim();
+      const value = Number(cleaned);
+      return Number.isFinite(value) ? value : NaN;
+    }
+
+    // A row counts as "filled" if it has a name or an amount. Empty rows are ignored.
+    function isFilled(row) {
+      return row.name.trim() !== "" || row.amount.trim() !== "";
+    }
+
+    // ---------- Category rows ----------
+
+    // Adds a row to the form and returns it
+    function addRow(name = "", amount = "", placeholder = "Category name") {
+      const row = rowTemplate.content.firstElementChild.cloneNode(true);
+      const nameInput = row.querySelector(".name-input");
+      nameInput.value = name;
+      nameInput.placeholder = placeholder;
+      row.querySelector(".amount-input").value = amount;
+      rowsEl.appendChild(row);
+      return row;
+    }
+
+    // Reads everything typed in the form, in the same shape Flask expects
+    function readForm() {
+      return {
+        month: MONTH,
+        spending_limit: limitInput.value,
+        categories: [...rowsEl.children].map(row => ({
+          name: row.querySelector(".name-input").value,
+          amount: row.querySelector(".amount-input").value
+        }))
+      };
+    }
+
+    // ---------- Live preview ----------
+
+    function updatePreview() {
+      const data = readForm();
+
+      // Color each row's dot. Only filled rows count, so the colors match
+      // the dashboard, which never sees the empty rows.
+      let colorIndex = 0;
+      [...rowsEl.children].forEach((rowEl, i) => {
+        const dot = rowEl.querySelector(".dot");
+        dot.style.background = isFilled(data.categories[i]) ? categoryColor(colorIndex++) : EMPTY_COLOR;
+      });
+
+      const limitText = data.spending_limit.trim();
+      const limit = limitText === "" ? NaN : parseMoney(limitText);
+
+      // No usable spending limit yet: show the friendly empty state
+      const hasLimit = limit > 0;
+      document.getElementById("preview-empty").hidden = hasLimit;
+      document.getElementById("preview-chart").hidden = !hasLimit;
+      if (!hasLimit) return;
+
+      // Amounts that aren't valid yet (typos, negatives) count as $0 in the preview
+      const filled = data.categories.filter(isFilled);
+      const labels = filled.map(row => row.name.trim() || "Unnamed");
+      const amounts = filled.map(row => {
+        const value = row.amount.trim() === "" ? 0 : parseMoney(row.amount);
+        return value > 0 ? value : 0;
+      });
+      const colors = filled.map((row, i) => categoryColor(i));
+
+      const planned = amounts.reduce((total, a) => total + a, 0);
+      const unassigned = limit - planned;
+      const isOver = unassigned < 0;
+
+      // Add the gray "Unassigned" slice, unless the categories already use up the limit
+      if (!isOver) {
+        labels.push("Unassigned");
+        amounts.push(unassigned);
+        colors.push(EMPTY_COLOR);
+      }
+
+      // Center of the donut
+      const centerAmount = document.getElementById("center-amount");
+      centerAmount.textContent = formatMoney(Math.abs(unassigned));
+      centerAmount.style.color = isOver ? "var(--bad)" : "var(--text)";
+      document.getElementById("center-text").textContent = isOver ? "over limit" : "unassigned";
+
+      // "Planned: $1,610 of $2,000" and the progress bar (capped at 100% wide)
+      document.getElementById("planned-line").innerHTML =
+        `Planned: <strong>${formatMoney(planned)}</strong> of ${formatMoney(limit)}`;
+      const bar = document.getElementById("planned-bar");
+      bar.style.width = `${Math.min(100, (planned / limit) * 100)}%`;
+      bar.classList.toggle("over", isOver);
+
+      // Over-limit warning (a warning only: saving is still allowed)
+      const warning = document.getElementById("over-warning");
+      warning.hidden = !isOver;
+      warning.textContent = `Your categories are ${formatMoney(-unassigned)} over your limit`;
+
+      // Draw the chart the first time, then just update its numbers
+      if (!chart) {
+        chart = new Chart(document.getElementById("chart"), {
+          type: "doughnut",
+          data: {
+            labels: labels,
+            datasets: [{ data: amounts, backgroundColor: colors,
+                         borderColor: "#fff", borderWidth: 3, hoverOffset: 6 }]
+          },
+          options: {
+            cutout: "62%",
+            plugins: {
+              legend: { display: false }, // the color dots in the form act as the legend
+              tooltip: {
+                callbacks: { label: ctx => ` ${ctx.label}: ${formatMoney(ctx.parsed)}` }
+              }
+            }
+          }
+        });
+      } else {
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = amounts;
+        chart.data.datasets[0].backgroundColor = colors;
+        chart.update();
+      }
+    }
+
+    // ---------- Validation ----------
+
+    // Checks the form the same way Flask's validate_budget() does, and
+    // returns errors in the same shape, so showErrors() works for both:
+    //   { spending_limit: "message", categories: { 2: { name: "...", amount: "..." } } }
+    function validate(data) {
+      const errors = {};
+
+      const limitText = data.spending_limit.trim();
+      const limit = parseMoney(limitText);
+      if (limitText === "") errors.spending_limit = "Enter your monthly spending limit.";
+      else if (Number.isNaN(limit)) errors.spending_limit = "Enter a number, like 2000.";
+      else if (limit <= 0) errors.spending_limit = "Your spending limit must be more than $0.";
+
+      const rowErrors = {};
+      const namesSeen = new Set(); // lowercase names, to catch "Rent" and "rent"
+
+      data.categories.forEach((row, i) => {
+        if (!isFilled(row)) return; // completely empty rows are ignored
+
+        const name = row.name.trim();
+        const amountText = row.amount.trim();
+        const problems = {};
+
+        if (amountText !== "") {
+          const amount = parseMoney(amountText);
+          if (Number.isNaN(amount)) problems.amount = "Enter a number.";
+          else if (amount < 0) problems.amount = "Amounts can't be negative.";
+        }
+
+        if (name === "") problems.name = "Give this category a name.";
+        else if (namesSeen.has(name.toLowerCase())) problems.name = "You already have a category with this name.";
+        namesSeen.add(name.toLowerCase());
+
+        if (Object.keys(problems).length) rowErrors[i] = problems;
+      });
+
+      if (Object.keys(rowErrors).length) errors.categories = rowErrors;
+      return errors;
+    }
+
+    // Removes every error message and red border
+    function clearErrors() {
+      form.querySelectorAll(".invalid").forEach(input => input.classList.remove("invalid"));
+      form.querySelectorAll(".field-error, .form-error").forEach(el => { el.hidden = true; });
+    }
+
+    // Shows error messages next to the fields they belong to
+    function showErrors(errors) {
+      clearErrors();
+
+      if (errors.spending_limit) {
+        limitInput.classList.add("invalid");
+        const el = document.getElementById("limit-error");
+        el.textContent = errors.spending_limit;
+        el.hidden = false;
+      }
+
+      const rowEls = [...rowsEl.children];
+      for (const [i, problems] of Object.entries(errors.categories || {})) {
+        const rowEl = rowEls[i];
+        if (!rowEl) continue;
+        if (problems.name) rowEl.querySelector(".name-input").classList.add("invalid");
+        if (problems.amount) rowEl.querySelector(".amount-input").classList.add("invalid");
+        const el = rowEl.querySelector(".field-error");
+        el.textContent = [problems.name, problems.amount].filter(Boolean).join(" ");
+        el.hidden = false;
+      }
+
+      if (errors.form) {
+        const el = document.getElementById("form-error");
+        el.textContent = errors.form;
+        el.hidden = false;
+      }
+
+      // Move the cursor to the first field with a problem
+      const firstInvalid = form.querySelector(".invalid");
+      if (firstInvalid) firstInvalid.focus();
+    }
+
+    // ---------- Events ----------
+
+    // Any typing in the form updates the preview right away.
+    // Editing a field also clears its error, since the user is fixing it.
+    form.addEventListener("input", event => {
+      const input = event.target;
+      if (input.classList.contains("invalid")) {
+        input.classList.remove("invalid");
+        // Hide the message once nothing in that row (or the limit field) is still red
+        const box = input.closest(".category-row") || input.closest(".limit-field");
+        if (!box.querySelector(".invalid")) box.querySelector(".field-error").hidden = true;
+      }
+      updatePreview();
+    });
+
+    document.getElementById("add-category-btn").addEventListener("click", () => {
+      const row = addRow();
+      row.querySelector(".name-input").focus();
+      updatePreview();
+    });
+
+    // One listener for every × button, including rows added later
+    rowsEl.addEventListener("click", event => {
+      if (!event.target.closest(".remove-btn")) return;
+      event.target.closest(".category-row").remove();
+      updatePreview();
+    });
+
+    form.addEventListener("submit", event => {
+      event.preventDefault(); // we send the data ourselves with fetch()
+
+      const data = readForm();
+      const errors = validate(data);
+      if (Object.keys(errors).length) {
+        showErrors(errors);
+        return;
+      }
+      clearErrors();
+
+      const saveBtn = document.getElementById("save-btn");
+      saveBtn.disabled = true;
+      saveBtn.textContent = "Saving…";
+
+      fetch("/budgets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
+      })
+        .then(res => res.json().then(body => {
+          if (res.ok) {
+            // Saved: go to this month's dashboard
+            window.location.href = body.redirect;
+            return;
+          }
+          // Flask found a problem: show its errors inline, just like ours
+          showErrors(body.errors || { form: "Something went wrong. Please try again." });
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save budget";
+        }))
+        .catch(() => {
+          showErrors({ form: "Couldn't reach the server. Check that the app is running and try again." });
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Save budget";
+        });
+    });
+
+    // Replaces everything in the form with a saved budget's limit and categories.
+    // Used when editing, and by the "Copy last month's budget" button.
+    function fillForm(budget) {
+      clearErrors();
+      limitInput.value = budget.spending_limit;
+      rowsEl.innerHTML = ""; // remove the current rows
+      budget.categories.forEach(c => addRow(c.name, String(c.amount)));
+      if (budget.categories.length === 0) addRow();
+      updatePreview();
+    }
+
+    // ---------- Copy last month's budget ----------
+
+    if (previous) {
+      // e.g. "November 2026 · $2,000 across 5 categories"
+      const count = previous.categories.length;
+      document.getElementById("copy-detail").textContent =
+        `${previous.month_label} · ${formatMoney(previous.spending_limit)} across ` +
+        `${count} ${count === 1 ? "category" : "categories"}`;
+
+      document.getElementById("copy-btn").addEventListener("click", () => {
+        // If the user already typed something, check before replacing it
+        const data = readForm();
+        const hasTyped = data.spending_limit.trim() !== "" || data.categories.some(isFilled);
+        if (hasTyped && !confirm(`Replace what you've entered with your ${previous.month_label} budget?`)) {
+          return;
+        }
+        // Only the plan is copied (limit and planned amounts), not what was spent
+        fillForm(previous);
+        limitInput.focus();
+      });
+    }
+
+    // ---------- Start ----------
+
+    if (existing) {
+      // Editing: fill in the saved budget
+      fillForm(existing);
+    } else {
+      // New budget: three empty rows with example names
+      addRow("", "", "e.g. Rent");
+      addRow("", "", "e.g. Groceries");
+      addRow("", "", "e.g. Phone");
+    }
+    updatePreview();
+  </script>
+</body>
+</html>

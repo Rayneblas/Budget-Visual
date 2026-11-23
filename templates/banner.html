@@ -1,0 +1,26 @@
+{# Shared banner. Pages add it with an include tag for "banner.html"
+   and also link static/banner.css for its styles.
+   Set show_back_link to true to show the "← All months" link.
+   (This is a Jinja comment, so Flask removes it before sending the page.) #}
+<header class="banner">
+  <div class="banner-inner">
+    {% if show_back_link %}
+      <a class="back-link" href="/">← All months</a>
+    {% endif %}
+    <div class="banner-brand">
+      <!-- Simple two-ring logo, matching the dashboard chart -->
+      <svg class="logo" viewBox="0 0 44 44" aria-hidden="true">
+        <circle cx="22" cy="22" r="18" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="5"/>
+        <circle cx="22" cy="22" r="18" fill="none" stroke="#fff" stroke-width="5"
+                stroke-dasharray="80 200" stroke-linecap="round" transform="rotate(-90 22 22)"/>
+        <circle cx="22" cy="22" r="10" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="4"/>
+        <circle cx="22" cy="22" r="10" fill="none" stroke="#a5b4fc" stroke-width="4"
+                stroke-dasharray="40 200" stroke-linecap="round" transform="rotate(-90 22 22)"/>
+      </svg>
+      <div>
+        <h1>Budget App</h1>
+        <p>See where your money actually goes</p>
+      </div>
+    </div>
+  </div>
+</header>

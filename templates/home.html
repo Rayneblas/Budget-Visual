@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Budget App</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='banner.css') }}">
+  <style>
+    :root {
+      --brand: #4f46e5;        /* indigo */
+      --brand-soft: #eef2ff;   /* light indigo for the badge and button hover */
+      --text: #111827;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --good: #059669;
+      --bad: #dc2626;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: #ffffff;
+      color: var(--text);
+      font-family: "Inter", system-ui, -apple-system, sans-serif;
+    }
+
+    /* Extra space under the banner on this page so the year card can overlap it */
+    .banner { padding-bottom: 96px; }
+
+    /* The negative top margin pulls the content up over the banner */
+    .page { max-width: 1040px; margin: -64px auto 0; padding: 0 16px 48px; }
+
+    /* ---------- Year card (overlaps the banner) ---------- */
+    .year-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 20px 24px;
+      box-shadow: 0 10px 30px rgba(17, 24, 39, 0.08), 0 1px 3px rgba(17, 24, 39, 0.06);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+      flex-wrap: wrap;
+      margin-bottom: 28px;
+    }
+    .year-switch { display: flex; align-items: center; gap: 12px; }
+    .year-switch button {
+      width: 36px; height: 36px; border-radius: 10px;
+      border: 1px solid var(--line); background: #fff; color: var(--muted);
+      font-size: 1.1rem; cursor: pointer;
+    }
+    .year-switch button:hover { background: var(--brand-soft); color: var(--brand); }
+    .year { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; }
+    .year-stats { display: flex; gap: 32px; }
+    .year-stats .label {
+      font-size: 0.72rem; font-weight: 500; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .year-stats .value { font-size: 1.15rem; font-weight: 600; margin-top: 2px; }
+
+    /* ---------- Month grid ---------- */
+    .section-title {
+      font-size: 0.8rem; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 12px;
+    }
+    /* 4 columns on desktop (2 on tablets and 1 on phones, see the bottom of this file) */
+    .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+    .no-months { color: var(--muted); margin: 0; }
+
+    .month {
+      display: block;
+      text-decoration: none;
+      color: inherit;
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 20px;
+      transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+    }
+    .month:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(17, 24, 39, 0.08); border-color: #c7d2fe; }
+    .month:focus-visible { outline: 3px solid #c7d2fe; outline-offset: 2px; }
+    /* The current month gets a thicker indigo border. Padding drops by 1px
+       to make up for the extra 1px of border, so the card doesn't grow. */
+    .month.current { border: 2px solid var(--brand); padding: 19px; }
+
+    .month-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
+    .month-name { font-size: 1.05rem; font-weight: 600; }
+    .badge {
+      font-size: 0.7rem; font-weight: 600; color: var(--brand);
+      background: var(--brand-soft); padding: 3px 8px; border-radius: 999px;
+      white-space: nowrap;
+    }
+
+    /* "$450 left" / "$80 over" */
+    .status { margin-top: 18px; font-size: 1.5rem; font-weight: 700; }
+    .status.good { color: var(--good); }
+    .status.bad { color: var(--bad); }
+    .status small { font-size: 0.85rem; font-weight: 500; }
+
+    /* Progress bar of spent vs. limit */
+    .bar { height: 6px; background: #f1f5f9; border-radius: 999px; margin-top: 12px; overflow: hidden; }
+    .bar span { display: block; height: 100%; border-radius: 999px; background: var(--brand); }
+    .bar span.over { background: var(--bad); }
+    .detail { margin-top: 8px; font-size: 0.82rem; color: var(--muted); }
+
+    /* Months not set up yet: lighter, dashed */
+    .month.empty { border: 1.5px dashed #cbd5e1; background: #fafafa; }
+    .month.empty.current { border: 2px dashed var(--brand); padding: 19px; }
+    .month.empty .month-name { color: var(--muted); }
+    .empty-text { margin-top: 18px; font-size: 0.9rem; color: var(--muted); }
+    .setup-link {
+      display: inline-block; margin-top: 14px; font-size: 0.85rem; font-weight: 600;
+      color: var(--brand);
+    }
+
+    /* ---------- Welcome card (shown when there are no budgets at all) ---------- */
+    .welcome {
+      max-width: 560px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 16px;
+      padding: 40px 32px;
+      text-align: center;
+      box-shadow: 0 10px 30px rgba(17, 24, 39, 0.08), 0 1px 3px rgba(17, 24, 39, 0.06);
+    }
+    .welcome h2 { margin: 0 0 10px; font-size: 1.5rem; font-weight: 700; }
+    .welcome p { margin: 0 0 24px; color: var(--muted); line-height: 1.5; }
+    .btn {
+      font: inherit; font-size: 0.95rem; font-weight: 600;
+      border: none; border-radius: 10px; padding: 10px 18px; cursor: pointer;
+      background: var(--brand); color: #fff;
+      display: inline-block; text-decoration: none; /* so a link looks like a button */
+    }
+    .btn:hover { background: #4338ca; }
+
+    /* ---------- Smaller screens ---------- */
+    /* Tablets: 2 columns */
+    @media (max-width: 900px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+    /* Phones: 1 column, and the year stats spread across the card */
+    @media (max-width: 560px) {
+      .grid { grid-template-columns: 1fr; }
+      .year-stats { gap: 20px; width: 100%; justify-content: space-between; }
+      .welcome { padding: 28px 20px; }
+    }
+  </style>
+</head>
+<body>
+  {% include "banner.html" %}
+
+  <!-- Filled in by the script below: the year card and month grid, or the welcome card -->
+  <main class="page" id="content"></main>
+
+  <script>
+    // Whole dollars only on this page, e.g. "$1,550"
+    const money = new Intl.NumberFormat("en-US", {
+      style: "currency", currency: "USD", maximumFractionDigits: 0
+    });
+
+    // Turns "2026-11" into "November" (no year, since the year card shows it)
+    function monthName(monthString) {
+      const [year, month] = monthString.split("-").map(Number);
+      return new Date(year, month - 1).toLocaleString("en-US", { month: "long" });
+    }
+
+    // Today's month as "YYYY-MM", e.g. "2026-11" (padStart turns "9" into "09")
+    const now = new Date();
+    const CURRENT_MONTH = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    // The year shown in the year card. The arrows will change this later.
+    const shownYear = now.getFullYear();
+
+    // Placeholder until switching years is built
+    function changeYear() {
+      alert("Switching years is coming soon!");
+    }
+
+    // HTML for the "This month" badge, or nothing for other months
+    function badgeFor(month) {
+      return month === CURRENT_MONTH ? `<span class="badge">This month</span>` : "";
+    }
+
+    // The year card: year with arrows, plus totals worked out from the data
+    function yearCard(year, budgets) {
+      const tracked = budgets.filter(b => b.set_up);              // months with a budget
+      const spent = tracked.reduce((total, b) => total + b.spent, 0);
+      const under = tracked.filter(b => b.spent <= b.spending_limit).length; // spending exactly the limit counts as under
+      const underText = tracked.length ? `${under} of ${tracked.length}` : "–";
+
+      return `
+        <section class="year-card">
+          <div class="year-switch">
+            <button type="button" aria-label="Previous year" onclick="changeYear()">‹</button>
+            <div class="year">${year}</div>
+            <button type="button" aria-label="Next year" onclick="changeYear()">›</button>
+          </div>
+          <div class="year-stats">
+            <div><div class="label">Spent this year</div><div class="value">${money.format(spent)}</div></div>
+            <div><div class="label">Months tracked</div><div class="value">${tracked.length}</div></div>
+            <div><div class="label">Under budget</div><div class="value">${underText}</div></div>
+          </div>
+        </section>
+      `;
+    }
+
+    // A month that has a budget. The whole card is a link to its dashboard.
+    function monthCard(b) {
+      const remaining = b.spending_limit - b.spent;
+      const isOver = remaining < 0;
+      // Fill the bar by how much of the limit is spent, capped at 100%
+      const percent = Math.min(100, Math.round((b.spent / b.spending_limit) * 100));
+      const currentClass = b.month === CURRENT_MONTH ? "current" : "";
+
+      return `
+        <a class="month ${currentClass}" href="/month/${b.month}">
+          <div class="month-top">
+            <span class="month-name">${monthName(b.month)}</span>
+            ${badgeFor(b.month)}
+          </div>
+          <div class="status ${isOver ? "bad" : "good"}">
+            ${money.format(Math.abs(remaining))} <small>${isOver ? "over" : "left"}</small>
+          </div>
+          <div class="bar" role="progressbar" aria-label="Spent of limit"
+               aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percent}">
+            <span class="${isOver ? "over" : ""}" style="width: ${percent}%"></span>
+          </div>
+          <div class="detail">${money.format(b.spent)} of ${money.format(b.spending_limit)} spent</div>
+        </a>
+      `;
+    }
+
+    // A month with no budget yet: dashed card that opens the setup page
+    function notSetUpCard(b) {
+      const currentClass = b.month === CURRENT_MONTH ? "current" : "";
+      return `
+        <a class="month empty ${currentClass}" href="/setup/${b.month}">
+          <div class="month-top">
+            <span class="month-name">${monthName(b.month)}</span>
+            ${badgeFor(b.month)}
+          </div>
+          <div class="empty-text">No budget yet</div>
+          <span class="setup-link">+ Set up budget</span>
+        </a>
+      `;
+    }
+
+    // Shown instead of everything else when there are no budgets at all.
+    // The button starts with the current month's budget.
+    function welcomeCard() {
+      return `
+        <div class="welcome">
+          <h2>See where your money actually goes</h2>
+          <p>Plan a monthly spending limit, log what you spend, and compare your plan to reality category by category.</p>
+          <a class="btn" href="/setup/${CURRENT_MONTH}">Set up your budget</a>
+        </div>
+      `;
+    }
+
+    // Load the list of months from Flask and build the page
+    fetch("/budgets")
+      .then(res => res.json())
+      .then(budgets => {
+        const content = document.getElementById("content");
+
+        if (budgets.length === 0) {
+          content.innerHTML = welcomeCard();
+          return;
+        }
+
+        // Only the months in the year being shown ("2026-..." for 2026)
+        const yearBudgets = budgets.filter(b => b.month.startsWith(`${shownYear}-`));
+        const cards = yearBudgets.map(b => b.set_up ? monthCard(b) : notSetUpCard(b));
+
+        content.innerHTML = `
+          ${yearCard(shownYear, yearBudgets)}
+          <h2 class="section-title">Months</h2>
+          ${cards.length
+            ? `<section class="grid">${cards.join("")}</section>`
+            : `<p class="no-months">No months for ${shownYear} yet.</p>`}
+        `;
+      });
+  </script>
+</body>
+</html>

@@ -6,7 +6,9 @@
   <title>Budget App</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='banner.css') }}">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="{{ url_for('static', filename='colors.js') }}"></script>
   <style>
     :root {
       --bg: #f5f6f8;
@@ -29,22 +31,24 @@
       font-family: "Inter", system-ui, -apple-system, sans-serif;
     }
 
+    /* 1040px matches the banner, so the edges line up */
     .page {
-      max-width: 1000px;
+      max-width: 1040px;
       margin: 0 auto;
-      padding: 40px 16px;
+      padding: 32px 16px 40px;
     }
 
-    /* ---------- Header ---------- */
-    header {
+    /* ---------- Page header (month name + Add expense) ---------- */
+    .page-header {
       margin-bottom: 28px;
       display: flex;
       align-items: center;
       justify-content: space-between; /* title left, main action far right */
+      flex-wrap: wrap; /* on narrow phones the buttons drop under the title */
       gap: 16px;
     }
-    header h1 { margin: 0; font-size: 1.75rem; font-weight: 700; }
-    header p { margin: 4px 0 0; color: var(--muted); }
+    .page-header h2 { margin: 0; font-size: 1.75rem; font-weight: 700; }
+    .page-header p { margin: 4px 0 0; color: var(--muted); }
 
     /* ---------- Buttons ---------- */
     .btn {
@@ -60,6 +64,15 @@
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-primary:hover { background: var(--accent-hover); }
     .btn-primary:focus-visible { outline: 3px solid #c7d2fe; outline-offset: 2px; }
+    .btn-outline {
+      display: inline-block;
+      background: #fff;
+      color: var(--text);
+      border: 1px solid var(--line);
+      text-decoration: none;
+    }
+    .btn-outline:hover { border-color: #c7d2fe; color: var(--accent-hover); }
+    .header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     .btn-secondary { background: transparent; color: var(--muted); }
     .btn-secondary:hover { background: var(--bg); color: var(--text); }
 
@@ -156,11 +169,21 @@
     }
     .center-label .big { font-size: 2rem; font-weight: 700; }
     .center-label .small { font-size: 0.85rem; color: var(--muted); margin-top: 2px; }
-    .caption {
-      margin: 16px 0 0;
+    /* ---------- Key under the chart ---------- */
+    .chart-key {
+      margin-top: 16px;
       text-align: center;
       font-size: 0.85rem;
       color: var(--muted);
+    }
+    .chart-key p { margin: 0 0 6px; }
+    .key-item { display: inline-flex; align-items: center; margin: 0 8px; white-space: nowrap; }
+    .swatch {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+      margin-right: 6px;
     }
 
     /* ---------- Breakdown table ---------- */
@@ -204,15 +227,22 @@
     }
   </style>
 </head>
-<body>
+<body data-month="{{ month }}">
+  {% with show_back_link = true %}
+    {% include "banner.html" %}
+  {% endwith %}
+
   <div class="page">
-    <header>
+    <div class="page-header">
       <div>
-        <h1>Budget App</h1>
-        <p id="subtitle">Loading…</p>
+        <h2 id="month-title">&nbsp;</h2>
+        <p id="subtitle">Spending plan</p>
       </div>
-      <button class="btn btn-primary" id="add-expense-btn" type="button">+ Add expense</button>
-    </header>
+      <div class="header-actions">
+        <a class="btn btn-outline" id="edit-budget-btn" href="/setup/{{ month }}">Edit budget</a>
+        <button class="btn btn-primary" id="add-expense-btn" type="button">+ Add expense</button>
+      </div>
+    </div>
 
     <dialog id="expense-dialog">
       <form id="expense-form" novalidate>
@@ -263,7 +293,13 @@
             <div class="small" id="center-text"></div>
           </div>
         </div>
-        <p class="caption">Inner ring: planned &nbsp;·&nbsp; Outer ring: actual</p>
+        <div class="chart-key">
+          <p>Inner ring: planned &nbsp;·&nbsp; Outer ring: actual</p>
+          <p>
+            <span class="key-item"><span class="swatch" style="background:#dc2626"></span>Spent over plan</span>
+            <span class="key-item"><span class="swatch" style="background:#e5e7eb"></span>Not spent / unassigned</span>
+          </p>
+        </div>
       </div>
 
       <div class="card">
@@ -285,9 +321,7 @@
   </div>
 
   <script>
-    // One color per category, in order. The last color is for "Not spent yet".
-    const COLORS = ["#6366f1", "#0ea5e9", "#14b8a6", "#f59e0b", "#f43f5e", "#8b5cf6", "#84cc16"];
-    const EMPTY_COLOR = "#e5e7eb";
+    // Category colors (categoryColor, EMPTY_COLOR) come from static/colors.js
 
     const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
     const sum = arr => arr.reduce((a, b) => a + b, 0);
@@ -306,13 +340,106 @@
       return `<td class="num even">On plan</td>`;
     }
 
-    const BUDGET_ID = "demo";
+    // Whole dollars when there are no cents ("$300"), otherwise cents ("$12.50").
+    // Used in the chart tooltips.
+    function shortMoney(value) {
+      const cents = Math.round(value * 100) / 100;
+      return cents.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: Number.isInteger(cents) ? 0 : 2
+      });
+    }
+
+    // ---------- Building the two donut rings ----------
+    //
+    // Both rings are drawn out of the same total (the "scale"), so they can be
+    // compared directly: $100 is the same length of arc on either ring.
+    //   scale = the biggest of: the limit, total planned, total spent
+    // Each ring ends with a transparent slice that fills it up to the scale.
+    //
+    // Returns { inner, outer }. Each ring is a list of slices like:
+    //   { value: 300, color: "#0ea5e9", label: "Groceries: $300 planned" }
+    // A label of null means "no tooltip" (used for the transparent slices).
+    function buildRings(limit, categories, planned, actual) {
+      const totalPlanned = sum(planned);
+      const totalSpent = sum(actual);
+      const scale = Math.max(limit, totalPlanned, totalSpent);
+
+      const inner = []; // the plan
+      const outer = []; // what was actually spent
+
+      // Adds a slice to a ring, skipping slices of size 0
+      function addSlice(ring, value, color, label) {
+        if (value > 0) ring.push({ value, color, label });
+      }
+
+      // ----- Inner ring: the plan -----
+      categories.forEach((name, i) => {
+        addSlice(inner, planned[i], categoryColor(i),
+          `${name}: ${shortMoney(planned[i])} planned`);
+      });
+      const unassigned = limit - totalPlanned;
+      addSlice(inner, unassigned, EMPTY_COLOR, `Unassigned: ${shortMoney(unassigned)}`);
+      // Whatever is left of the scale. In an over-budget month this is the
+      // visible gap that shows how far past the limit spending went.
+      addSlice(inner, scale - totalPlanned - Math.max(0, unassigned), TRANSPARENT, null);
+
+      // ----- Outer ring: actual spending -----
+      categories.forEach((name, i) => {
+        const withinPlan = Math.min(actual[i], planned[i]);  // spent up to the plan
+        const overPlan = Math.max(0, actual[i] - planned[i]); // spent beyond the plan
+        addSlice(outer, withinPlan, categoryColor(i),
+          `${name}: ${shortMoney(actual[i])} of ${shortMoney(planned[i])} spent`);
+        addSlice(outer, overPlan, OVER_COLOR,
+          `${name}: ${shortMoney(overPlan)} over plan`);
+      });
+      const notSpent = limit - totalSpent;
+      addSlice(outer, notSpent, EMPTY_COLOR, `Not spent yet: ${shortMoney(notSpent)}`);
+      addSlice(outer, scale - totalSpent - Math.max(0, notSpent), TRANSPARENT, null);
+
+      return { inner, outer };
+    }
+
+    // Turns a ring (a list of slices) into a Chart.js dataset.
+    // Transparent slices get no border and don't pop out on hover.
+    function toDataset(ring) {
+      const colors = ring.map(slice => slice.color);
+      return {
+        data: ring.map(slice => slice.value),
+        backgroundColor: colors,
+        hoverBackgroundColor: colors, // keep the same colors on hover
+        borderColor: "#fff",
+        borderWidth: ring.map(slice => slice.color === TRANSPARENT ? 0 : 3),
+        hoverOffset: ring.map(slice => slice.color === TRANSPARENT ? 0 : 6),
+        sliceLabels: ring.map(slice => slice.label) // our own field, read by the tooltip
+      };
+    }
+
+    // The month comes from the URL (/month/2026-11). Flask writes it into
+    // the <body data-month="..."> attribute when it renders this page.
+    const MONTH = document.body.dataset.month;
     let chart = null; // created on first render, updated afterwards
 
+    // The title uses the month from the URL, so it's right even before data loads.
+    // ("Budget App" is now in the banner, so the page title is the month itself.)
+    document.getElementById("month-title").textContent = formatMonth(MONTH);
+
     function loadSummary() {
-      return fetch(`/budgets/${BUDGET_ID}/summary`)
-        .then(res => res.json())
-        .then(render);
+      return fetch(`/budgets/${MONTH}/summary`)
+        .then(res => {
+          if (res.status === 404) {
+            // This month exists but has no budget yet
+            document.getElementById("subtitle").textContent = "Not set up yet";
+            document.getElementById("add-expense-btn").hidden = true;
+            // Nothing to edit yet, so the edit button becomes the way to set it up
+            const editBtn = document.getElementById("edit-budget-btn");
+            editBtn.textContent = "Set up budget";
+            editBtn.className = "btn btn-primary";
+            return;
+          }
+          return res.json().then(render);
+        });
     }
 
     function render(data) {
@@ -321,10 +448,9 @@
         const totalSpent = sum(data.actual);
         const remaining = limit - totalSpent;
         const isOver = remaining < 0;
-        const colors = data.categories.map((_, i) => COLORS[i % COLORS.length]);
+        const colors = data.categories.map((_, i) => categoryColor(i));
 
         // ---------- Header and summary cards ----------
-        document.getElementById("subtitle").textContent = `Spending plan for ${formatMonth(data.month)}`;
         document.getElementById("stat-budget").textContent = money.format(limit);
         document.getElementById("stat-spent").textContent = money.format(totalSpent);
 
@@ -340,47 +466,36 @@
         document.getElementById("center-text").textContent =
           isOver ? "over budget" : `left of ${money.format(limit)}`;
 
-        // ---------- Donut chart ----------
-        // Pad each ring with a "Not spent yet" slice so it only fills the circle
-        // when the whole limit is used.
-        const plannedRing = [...data.planned, Math.max(0, limit - totalPlanned)];
-        const actualRing = [...data.actual, Math.max(0, limit - totalSpent)];
-        const ringColors = [...colors, EMPTY_COLOR];
-        const labels = [...data.categories, "Not spent yet"];
-
         // Fill the category dropdown in the Add expense form
         const select = document.getElementById("expense-category");
         const previous = select.value;
         select.innerHTML = data.categories.map(c => `<option value="${c}">${c}</option>`).join("");
         if (data.categories.includes(previous)) select.value = previous;
 
+        // ---------- Donut chart ----------
+        const rings = buildRings(limit, data.categories, data.planned, data.actual);
+        // Chart.js draws the first dataset on the outside, so actual goes first
+        const datasets = [toDataset(rings.outer), toDataset(rings.inner)];
+
         if (chart) {
-          // Already drawn: just swap in the new numbers so it animates
-          chart.data.labels = labels;
-          chart.data.datasets[0].data = actualRing;
-          chart.data.datasets[0].backgroundColor = ringColors;
-          chart.data.datasets[1].data = plannedRing;
-          chart.data.datasets[1].backgroundColor = ringColors;
+          // Already drawn: swap in the new rings so it animates
+          chart.data.datasets = datasets;
           chart.update();
         } else chart = new Chart(document.getElementById("chart"), {
           type: "doughnut",
-          data: {
-            labels: labels,
-            datasets: [
-              // Chart.js draws the first dataset on the outside
-              { label: "Actual", data: actualRing, backgroundColor: ringColors,
-                borderColor: "#fff", borderWidth: 3, hoverOffset: 6 },
-              { label: "Planned", data: plannedRing, backgroundColor: ringColors,
-                borderColor: "#fff", borderWidth: 3, hoverOffset: 6 }
-            ]
-          },
+          data: { datasets: datasets },
           options: {
             cutout: "58%",
             plugins: {
               legend: { display: false }, // the breakdown table acts as the legend
               tooltip: {
+                // Each ring has its own slices, so each dataset carries its own
+                // tooltip text in sliceLabels. Transparent slices have none
+                // (null), and this filter hides their tooltip.
+                filter: item => item.dataset.sliceLabels[item.dataIndex] !== null,
                 callbacks: {
-                  label: ctx => `${ctx.dataset.label}: ${money.format(ctx.parsed)}`
+                  title: () => "",
+                  label: ctx => ctx.dataset.sliceLabels[ctx.dataIndex]
                 }
               }
             }
@@ -432,7 +547,7 @@
       const submitBtn = form.querySelector('button[type="submit"]');
       submitBtn.disabled = true;
 
-      fetch(`/budgets/${BUDGET_ID}/expenses`, {
+      fetch(`/budgets/${MONTH}/expenses`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
