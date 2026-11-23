@@ -10,7 +10,7 @@ How it works:
 - Rows come back as dictionaries, e.g. {"id": "...", "month": "2026-11"}.
 
 Always pass values with %s placeholders, never with f-strings:
-    query("select * from budgets where user_id = %s", (DEV_USER_ID,))
+    query("select * from budgets where user_id = %s", (auth.current_user_id(),))
 psycopg sends the values separately from the SQL, so they can't change
 what the query does (this prevents SQL injection).
 """
@@ -24,8 +24,10 @@ from psycopg.rows import dict_row
 # Read the variables in .env into the environment
 load_dotenv()
 
-# Placeholder user until real login exists.
-# Phase 2 replaces this with the ID of the logged-in user.
+# The logged-in user's ID comes from auth.current_user_id().
+#
+# DEV_USER_ID owns the sample data that seed.py copies into the database.
+# It isn't a real account, so nobody can log in as this user.
 DEV_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
@@ -48,15 +50,20 @@ def _connection_string():
     return url
 
 
+def connect():
+    """Open a new database connection. Used by get_db() and by seed.py."""
+    return psycopg.connect(
+        _connection_string(),
+        row_factory=dict_row,   # rows come back as dictionaries
+        prepare_threshold=None, # needed for Supabase's connection pooler
+        connect_timeout=10,     # give up after 10 seconds instead of hanging
+    )
+
+
 def get_db():
     """Return this request's database connection, opening it the first time."""
     if "db" not in g:
-        g.db = psycopg.connect(
-            _connection_string(),
-            row_factory=dict_row,   # rows come back as dictionaries
-            prepare_threshold=None, # needed for Supabase's connection pooler
-            connect_timeout=10,     # give up after 10 seconds instead of hanging
-        )
+        g.db = connect()
     return g.db
 
 
@@ -65,7 +72,7 @@ def query(sql, params=(), one=False):
 
     Example:
         query("select count(*) as n from budgets where user_id = %s",
-              (DEV_USER_ID,), one=True)
+              (auth.current_user_id(),), one=True)
     """
     with get_db().cursor() as cur:
         cur.execute(sql, params)

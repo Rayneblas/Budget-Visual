@@ -60,7 +60,18 @@
       padding: 10px 18px;
       cursor: pointer;
       white-space: nowrap;
+      display: inline-block;
+      text-decoration: none; /* so links styled as buttons aren't underlined */
     }
+
+    /* ---------- Shown instead of the stats and chart when a month has no budget ---------- */
+    .no-budget {
+      text-align: center;
+      padding: 48px 24px;
+    }
+    .no-budget h2 { margin: 0 0 8px; font-size: 1.2rem; }
+    .no-budget p { margin: 0 0 20px; color: var(--muted); }
+    [hidden] { display: none !important; }
     .btn-primary { background: var(--accent); color: #fff; }
     .btn-primary:hover { background: var(--accent-hover); }
     .btn-primary:focus-visible { outline: 3px solid #c7d2fe; outline-offset: 2px; }
@@ -268,6 +279,13 @@
       </form>
     </dialog>
 
+    <!-- Only shown when this month has no budget (the summary route returns 404) -->
+    <section class="card no-budget" id="no-budget" hidden>
+      <h2>No budget for this month yet</h2>
+      <p>Set a spending limit and plan your categories to start tracking.</p>
+      <a class="btn btn-primary" href="/setup/{{ month }}">Set up budget</a>
+    </section>
+
     <section class="stats">
       <div class="card stat">
         <div class="label">Budget</div>
@@ -429,13 +447,14 @@
       return fetch(`/budgets/${MONTH}/summary`)
         .then(res => {
           if (res.status === 404) {
-            // This month exists but has no budget yet
+            // No budget for this month: hide the empty stats and chart, and
+            // show the "Set up budget" card instead
             document.getElementById("subtitle").textContent = "Not set up yet";
             document.getElementById("add-expense-btn").hidden = true;
-            // Nothing to edit yet, so the edit button becomes the way to set it up
-            const editBtn = document.getElementById("edit-budget-btn");
-            editBtn.textContent = "Set up budget";
-            editBtn.className = "btn btn-primary";
+            document.getElementById("edit-budget-btn").hidden = true;
+            document.querySelector(".stats").hidden = true;
+            document.querySelector(".layout").hidden = true;
+            document.getElementById("no-budget").hidden = false;
             return;
           }
           return res.json().then(render);

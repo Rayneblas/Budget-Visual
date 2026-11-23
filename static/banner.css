@@ -6,12 +6,40 @@
   padding: 32px 0;
 }
 
-/* Same width as the page content below it, so the edges line up */
+/* Same width as the page content below it, so the edges line up.
+   Logo on the left, logged-in user on the right. */
 .banner-inner {
   max-width: 1040px;
   margin: 0 auto;
   padding: 0 16px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
 }
+
+/* Logged-in email and "Log out" button */
+.banner-user { display: flex; align-items: center; gap: 12px; }
+.banner-email {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.88rem;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis; /* long emails end in "…" */
+  white-space: nowrap;
+}
+.logout-btn {
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.logout-btn:hover { background: rgba(255, 255, 255, 0.25); }
 
 .banner-brand {
   display: flex;
@@ -35,4 +63,5 @@
 
 @media (max-width: 560px) {
   .banner h1 { font-size: 1.35rem; }
+  .banner-email { display: none; } /* not enough room on phones: just the button */
 }
