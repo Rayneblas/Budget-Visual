@@ -1,9 +1,13 @@
 import math
 from datetime import datetime
 
+import psycopg
 from flask import Flask, abort, jsonify, render_template, request
 
+import db
+
 app = Flask(__name__)
+db.init_app(app)  # closes each request's database connection when the request ends
 
 # The same planned amounts are used for every sample month
 SAMPLE_PLAN = {"Rent": 900, "Groceries": 300, "Insurance": 150, "Phone": 60, "Fun": 200}
@@ -304,6 +308,28 @@ def add_expense(month):
     expense = {"category": category, "amount": amount, "note": note}
     budget.setdefault("expenses", []).append(expense)
     return jsonify(expense), 201
+
+
+# ---------- Database check (temporary, Phase 1) ----------
+
+@app.route("/health/db")
+def health_db():
+    """Check that the app can reach Supabase: counts the rows in budgets."""
+    try:
+        row = db.query("select count(*) as n from budgets", one=True)
+        return jsonify({"ok": True, "budgets": row["n"]})
+    except db.DatabaseConfigError as e:
+        # .env problem (missing or wrong kind of URL). The message never includes the URL.
+        return jsonify({"ok": False, "error": str(e)}), 500
+    except psycopg.OperationalError:
+        # Couldn't connect. psycopg's own message can include parts of the
+        # connection string, so it's replaced with a safe one.
+        return jsonify({"ok": False, "error": "Could not connect to the database. "
+                        "Check SUPABASE_URL in .env and your internet connection."}), 500
+    except psycopg.Error as e:
+        # Connected, but the query failed (for example, no budgets table yet).
+        # These messages come from the database and don't contain the URL.
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 
 if __name__ == "__main__":
