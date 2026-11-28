@@ -1,4 +1,5 @@
-flask
-psycopg[binary]
-python-dotenv
-supabase
+flask==3.1.3
+psycopg[binary]==3.2.13
+python-dotenv==1.2.1
+supabase==2.33.0
+gunicorn==23.0.0

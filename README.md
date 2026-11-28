@@ -31,3 +31,19 @@ including over-budget months, so the charts have something to show.
 
 Warning: this deletes **all** of that account's existing budgets before
 adding the sample data.
+
+## Deployment
+
+The app is hosted on [Render](https://render.com).
+
+Live site: _(add the link here once it's deployed)_
+
+- **Build command:** `pip install -r requirements.txt`
+- **Start command:** `gunicorn app:app`
+- **Python version:** set by the `.python-version` file
+- **Environment variables** (set these in Render's dashboard, never in the repo):
+  - `DATABASE_URL`
+  - `SUPABASE_URL`
+  - `SUPABASE_KEY`
+  - `SECRET_KEY`
+  - `APP_ENV=production` (makes login cookies HTTPS-only)
