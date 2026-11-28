@@ -76,7 +76,7 @@
       margin-bottom: 16px;
     }
     .notice { background: var(--brand-soft); color: #3730a3; }
-    .error { background: var(--bad-soft); color: var(--bad); font-weight: 500; }
+    .error { background: var(--bad-soft); color: var(--bad); font-weight: 500; margin: 14px 0 0; }
 
     /* ---------- Form ---------- */
     .field { margin-bottom: 16px; }
@@ -144,11 +144,9 @@
         <p class="notice" role="status">{{ message }}</p>
       {% endfor %}
 
-      {% if error %}
-        <p class="error" role="alert">{{ error }}</p>
-      {% endif %}
-
-      <form method="post" action="{{ url_for('signup' if mode == 'signup' else 'login') }}">
+      <!-- novalidate: skip the browser's own pop-up checks, so every problem
+           shows as a friendly message from Flask under the form instead -->
+      <form method="post" action="{{ url_for('signup' if mode == 'signup' else 'login') }}" novalidate>
         <!-- The page to return to after logging in -->
         <input type="hidden" name="next" value="{{ next_page }}">
 
@@ -163,15 +161,29 @@
           {% if mode == "signup" %}
             <!-- new-password tells password managers to suggest a strong one -->
             <input type="password" id="password" name="password" autocomplete="new-password"
-                   minlength="6" required {{ "autofocus" if email }}>
-            <p class="hint">At least 6 characters.</p>
+                   minlength="8" required {{ "autofocus" if email }}>
+            <p class="hint">At least 8 characters.</p>
           {% else %}
             <input type="password" id="password" name="password" autocomplete="current-password"
                    required {{ "autofocus" if email }}>
           {% endif %}
         </div>
 
+        {% if mode == "signup" %}
+          <div class="field">
+            <label for="confirm_password">Confirm password</label>
+            <input type="password" id="confirm_password" name="confirm_password"
+                   autocomplete="new-password" minlength="8" required>
+          </div>
+        {% endif %}
+
         <button type="submit" class="submit">{{ "Create account" if mode == "signup" else "Log in" }}</button>
+
+        <!-- Friendly error from Flask, under the form. (Passwords are never sent
+             back to the page, so only the email stays filled in.) -->
+        {% if error %}
+          <p class="error" role="alert">{{ error }}</p>
+        {% endif %}
       </form>
 
       {% if mode == "signup" %}

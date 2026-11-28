@@ -108,13 +108,12 @@ def validate_budget(data):
 @app.route("/login", methods=["GET", "POST"])
 def login():
     """Log in with email and password."""
-    # Where to go after logging in (the page they were trying to open)
-    next_page = request.values.get("next", "")
-    if not auth.is_safe_next(next_page):
-        next_page = url_for("home")
-
     if auth.current_user_id():
-        return redirect(next_page)  # already logged in
+        return redirect(url_for("home"))  # already logged in
+
+    # Where to go after logging in: the page they were trying to open,
+    # but only if it's a page on this site (see auth.safe_next)
+    next_page = auth.safe_next(request.values.get("next", ""))
 
     email = ""
     error = None
@@ -127,43 +126,39 @@ def login():
             try:
                 auth.remember_user(auth.log_in(email, password))
                 return redirect(next_page)
-            except auth.AuthError as e:
+            except auth.LoginError as e:
                 error = str(e)
 
-    # ?confirmed=1 is added by the link in the confirmation email
-    if request.args.get("confirmed"):
-        flash("Your email is confirmed. Log in to get started.")
-
+    # email is sent back so the field stays filled in after an error
     return render_template("login.html", mode="login", email=email, error=error, next_page=next_page)
 
 
 @app.route("/signup", methods=["GET", "POST"])
 def signup():
-    """Create an account with email and password."""
+    """Create an account with email, password and confirm password."""
     if auth.current_user_id():
-        return redirect(url_for("home"))
+        return redirect(url_for("home"))  # already logged in
 
     email = ""
     error = None
     if request.method == "POST":
         email = request.form.get("email", "").strip()
         password = request.form.get("password", "")
-        if not email or "@" not in email:
-            error = "Enter a valid email address."
-        elif len(password) < 6:
-            error = "Your password needs at least 6 characters."
-        else:
+        confirm = request.form.get("confirm_password", "")
+
+        # Check the form here first, then let Supabase create the account
+        error = auth.signup_problem(email, password, confirm)
+        if error is None:
             try:
-                # Where the link in the confirmation email sends them
-                confirm_url = url_for("login", confirmed=1, _external=True)
-                user = auth.sign_up(email, password, confirm_url)
+                user = auth.sign_up(email, password)
                 if user:
-                    # Email confirmation is off in Supabase: logged in right away
-                    auth.remember_user(user)
+                    auth.remember_user(user)  # logged in right after signing up
                     return redirect(url_for("home"))
-                flash(f"Almost done! We sent a link to {email}. Click it to confirm your email, then log in.")
+                # Only if "Confirm email" is still on in Supabase
+                flash(f"Check your email: we sent a confirmation link to {email}. "
+                      "Click it, then log in.")
                 return redirect(url_for("login"))
-            except auth.AuthError as e:
+            except auth.LoginError as e:
                 error = str(e)
 
     return render_template("login.html", mode="signup", email=email, error=error, next_page="")
@@ -180,12 +175,14 @@ def logout():
 # ---------- Pages ----------
 
 @app.route("/")
+@auth.login_required
 def home():
     """Home page: a grid of month cards."""
     return render_template("home.html")
 
 
 @app.route("/month/<month>")
+@auth.login_required
 def month_dashboard(month):
     """Dashboard for one month, e.g. /month/2026-11."""
     if not is_valid_month(month):
@@ -273,6 +270,7 @@ def current_and_next_month():
 
 
 @app.route("/setup/<month>")
+@auth.login_required
 def setup(month):
     """Set up a new budget, or edit an existing one, e.g. /setup/2026-12."""
     if not is_valid_month(month):
@@ -302,6 +300,7 @@ def setup(month):
 # ---------- Data (JSON) ----------
 
 @app.route("/budgets")
+@auth.login_required
 def list_budgets():
     """Every month with a budget, plus this month and next month, oldest first.
 
@@ -335,6 +334,7 @@ def list_budgets():
 
 
 @app.route("/budgets", methods=["POST"])
+@auth.login_required
 def save_budget():
     """Save a budget from the setup page, then tell the page where to go next.
 
@@ -407,6 +407,7 @@ def in_use_message(categories):
 
 
 @app.route("/budgets/<month>/summary")
+@auth.login_required
 def summary(month):
     """Planned vs. actual for each category in one month (used by the dashboard)."""
     budget = find_budget(month) if is_valid_month(month) else None
@@ -439,6 +440,7 @@ def summary(month):
 
 
 @app.route("/budgets/<month>/expenses", methods=["POST"])
+@auth.login_required
 def add_expense(month):
     """Record an expense in one of this month's categories."""
     # find_budget() only looks at this user's budgets, so you can't add

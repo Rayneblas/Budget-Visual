@@ -1,7 +1,7 @@
 """Database helper: connects the Flask app to the Supabase Postgres database.
 
 How it works:
-- The connection string is read from .env (SUPABASE_URL). It is never
+- The connection string is read from .env (DATABASE_URL). It is never
   printed, logged, or written in the code.
 - Each request gets at most one connection, stored on Flask's `g`
   (a place to keep things for the current request only).
@@ -32,18 +32,18 @@ DEV_USER_ID = "00000000-0000-0000-0000-000000000001"
 
 
 class DatabaseConfigError(Exception):
-    """SUPABASE_URL is missing or isn't a Postgres connection string."""
+    """DATABASE_URL is missing or isn't a Postgres connection string."""
 
 
 def _connection_string():
     """Get the connection string from the environment, checking its shape."""
-    url = os.environ.get("SUPABASE_URL", "").strip()
+    url = os.environ.get("DATABASE_URL", "").strip()
     if not url:
-        raise DatabaseConfigError("SUPABASE_URL is not set in .env.")
+        raise DatabaseConfigError("DATABASE_URL is not set in .env.")
     if not url.startswith(("postgresql://", "postgres://")):
         # A common mix-up: the https:// project URL instead of the database one
         raise DatabaseConfigError(
-            "SUPABASE_URL must be a Postgres connection string starting with "
+            "DATABASE_URL must be a Postgres connection string starting with "
             "postgresql:// (Supabase: Connect > Connection string), "
             "not the https:// project URL."
         )
