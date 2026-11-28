@@ -1,1 +1,4 @@
 flask
+psycopg[binary]
+python-dotenv
+supabase
