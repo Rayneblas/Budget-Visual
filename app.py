@@ -199,13 +199,14 @@ def month_label_for(month):
 # ---------- Reading budgets from the database ----------
 
 def data_owner_id():
-    """Whose budgets the pages show.
+    """Whose budgets to read and save: the logged-in user's id.
 
-    For now that's DEV_USER_ID, who owns the sample data that seed.py
-    copied into the database. Changing this one line to
-    auth.current_user_id() will make each person see their own budgets.
+    Every query on budgets filters by this, either directly or by using a
+    budget id from find_budget() / find_previous_budget(), so each person
+    only ever sees and changes their own budgets. All routes that touch
+    budgets need @auth.login_required, so this is never None there.
     """
-    return db.DEV_USER_ID
+    return auth.current_user_id()
 
 
 def to_float(value):

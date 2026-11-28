@@ -24,12 +24,6 @@ from psycopg.rows import dict_row
 # Read the variables in .env into the environment
 load_dotenv()
 
-# The logged-in user's ID comes from auth.current_user_id().
-#
-# DEV_USER_ID owns the sample data that seed.py copies into the database.
-# It isn't a real account, so nobody can log in as this user.
-DEV_USER_ID = "00000000-0000-0000-0000-000000000001"
-
 
 class DatabaseConfigError(Exception):
     """DATABASE_URL is missing or isn't a Postgres connection string."""

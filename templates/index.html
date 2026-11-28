@@ -350,6 +350,18 @@
       return new Date(year, month - 1).toLocaleString("en-US", { month: "long", year: "numeric" });
     }
 
+    // Makes text safe to put inside HTML: "<b>Rent</b>" shows as those exact
+    // characters instead of bold text. Category names are typed by users, so
+    // they must never be run as HTML.
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
     // Shows how far over or under the plan a category is
     function differenceCell(planned, actual) {
       const diff = actual - planned;
@@ -446,6 +458,11 @@
     function loadSummary() {
       return fetch(`/budgets/${MONTH}/summary`)
         .then(res => {
+          if (res.status === 401) {
+            // The login expired: go to the login page, then come back to this month
+            window.location.href = "/login?next=" + encodeURIComponent(location.pathname);
+            return;
+          }
           if (res.status === 404) {
             // No budget for this month: hide the empty stats and chart, and
             // show the "Set up budget" card instead
@@ -488,7 +505,8 @@
         // Fill the category dropdown in the Add expense form
         const select = document.getElementById("expense-category");
         const previous = select.value;
-        select.innerHTML = data.categories.map(c => `<option value="${c}">${c}</option>`).join("");
+        // new Option(text, value) treats the name as plain text, never as HTML
+        select.replaceChildren(...data.categories.map(c => new Option(c, c)));
         if (data.categories.includes(previous)) select.value = previous;
 
         // ---------- Donut chart ----------
@@ -524,7 +542,7 @@
         // ---------- Breakdown table ----------
         document.getElementById("breakdown").innerHTML = data.categories.map((category, i) => `
           <tr>
-            <td><span class="dot" style="background:${colors[i]}"></span>${category}</td>
+            <td><span class="dot" style="background:${colors[i]}"></span>${escapeHtml(category)}</td>
             <td class="num">${money.format(data.planned[i])}</td>
             <td class="num">${money.format(data.actual[i])}</td>
             ${differenceCell(data.planned[i], data.actual[i])}

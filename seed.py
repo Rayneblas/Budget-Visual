@@ -1,13 +1,16 @@
-"""Copy the sample data below into the Supabase tables.
+"""Copy the sample data below into the Supabase tables, for one account.
 
-Run it with:
-    python3 seed.py
+Run it with the email of an account you've signed up with in the app:
+    python3 seed.py you@example.com
 
 What it does, all in one transaction (if anything fails, nothing is saved):
-1. Deletes DEV_USER_ID's existing budgets. The database's ON DELETE CASCADE
-   also removes their planned_expenses and expenses, so running this
-   twice doesn't create duplicates.
-2. For each sample month that has a budget, inserts:
+1. Looks up the account's id in Supabase's auth.users table. If there's
+   no account with that email, it stops without changing anything.
+2. Deletes ALL of that account's existing budgets, including any you made
+   in the app. The database's ON DELETE CASCADE also removes their
+   planned_expenses and expenses, so running this twice doesn't create
+   duplicates.
+3. For each sample month that has a budget, inserts:
    - one row in budgets
    - one row in planned_expenses per category, with position 0, 1, 2...
      in the current order (the order decides each category's chart color)
@@ -16,10 +19,10 @@ What it does, all in one transaction (if anything fails, nothing is saved):
      is dated the 15th of its month with the note "Sample data".
 Months with no budget (None in SAMPLE_BUDGETS) are skipped.
 """
+import sys
 from datetime import date
 
 import db
-from db import DEV_USER_ID
 
 # The same planned amounts are used for every sample month
 SAMPLE_PLAN = {"Rent": 900, "Groceries": 300, "Insurance": 150, "Phone": 60, "Fun": 200}
@@ -57,16 +60,27 @@ SAMPLE_BUDGETS = {
 }
 
 
-def seed():
+def find_user_id(email):
+    """The id of the account with this email, or None if there isn't one."""
+    # auth.users is Supabase's own table of accounts. lower() on both sides
+    # makes the match ignore capital letters ("Ray@x.com" = "ray@x.com").
+    with db.connect() as conn, conn.cursor() as cur:
+        cur.execute("select id from auth.users where lower(email) = lower(%s)", (email,))
+        row = cur.fetchone()
+    return row["id"] if row else None
+
+
+def seed(user_id):
+    """Replace this user's budgets with the sample data. Returns what was done."""
     counts = {"budgets": 0, "planned_expenses": 0, "expenses": 0}
     months_added = []
 
     # "with" commits when the block finishes, or rolls everything back on an error
     with db.connect() as conn, conn.cursor() as cur:
 
-        # 1. Remove the previous sample data
-        cur.execute("delete from budgets where user_id = %s", (DEV_USER_ID,))
-        deleted = cur.rowcount
+        # 1. Remove this user's existing budgets (and, by cascade, their categories and expenses)
+        cur.execute("delete from budgets where user_id = %s", (user_id,))
+        counts["deleted"] = cur.rowcount
 
         # 2. Insert each month, oldest first
         for month in sorted(SAMPLE_BUDGETS):
@@ -78,7 +92,7 @@ def seed():
             cur.execute(
                 "insert into budgets (user_id, month, spending_limit) "
                 "values (%s, %s, %s) returning id",
-                (DEV_USER_ID, month, budget["spending_limit"]),
+                (user_id, month, budget["spending_limit"]),
             )
             budget_id = cur.fetchone()["id"]
             counts["budgets"] += 1
@@ -107,10 +121,28 @@ def seed():
                 counts["expenses"] += 1
 
     # The connection has committed by this point
-    print(f"Removed {deleted} old sample budget(s) for DEV_USER_ID.")
-    print(f"Inserted {counts['budgets']} budgets ({', '.join(months_added)}),")
+    counts["months"] = months_added
+    return counts
+
+
+def main():
+    # sys.argv is the command split into words: ["seed.py", "you@example.com"]
+    if len(sys.argv) != 2:
+        print("Usage: python3 seed.py you@example.com")
+        print("Loads the sample budgets into that account (sign up in the app first).")
+        sys.exit(1)
+
+    email = sys.argv[1].strip()
+    user_id = find_user_id(email)
+    if user_id is None:
+        print("No account with that email. Sign up in the app first.")
+        sys.exit(1)
+
+    counts = seed(user_id)
+    print(f"Removed {counts['deleted']} existing budget(s) for {email}.")
+    print(f"Inserted {counts['budgets']} budgets ({', '.join(counts['months'])}),")
     print(f"  {counts['planned_expenses']} planned categories and {counts['expenses']} expenses.")
 
 
 if __name__ == "__main__":
-    seed()
+    main()

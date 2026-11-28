@@ -260,7 +260,14 @@
 
     // Load the list of months from Flask and build the page
     fetch("/budgets")
-      .then(res => res.json())
+      .then(res => {
+        // 401 = the login expired: go to the login page, then come back here
+        if (res.status === 401) {
+          window.location.href = "/login?next=" + encodeURIComponent(location.pathname);
+          return new Promise(() => {}); // stop here while the browser leaves the page
+        }
+        return res.json();
+      })
       .then(budgets => {
         const content = document.getElementById("content");
 
